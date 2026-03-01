@@ -6,10 +6,13 @@ import makeWASocket, {
   Browsers,
   DisconnectReason,
   WASocket,
+  downloadMediaMessage,
   fetchLatestWaWebVersion,
   makeCacheableSignalKeyStore,
   useMultiFileAuthState,
 } from '@whiskeysockets/baileys';
+
+import { transcribeAudio } from '../transcription.js';
 
 import {
   ASSISTANT_HAS_OWN_NUMBER,
@@ -195,12 +198,32 @@ export class WhatsAppChannel implements Channel {
         // Only deliver full message for registered groups
         const groups = this.opts.registeredGroups();
         if (groups[chatJid]) {
-          const content =
+          const isVoiceMessage = !!msg.message?.audioMessage;
+          let content =
             msg.message?.conversation ||
             msg.message?.extendedTextMessage?.text ||
             msg.message?.imageMessage?.caption ||
             msg.message?.videoMessage?.caption ||
             '';
+
+          // Handle voice messages: download, transcribe, inject as [Voice: ...]
+          if (isVoiceMessage && !content) {
+            try {
+              const audioBuffer = await downloadMediaMessage(
+                msg,
+                'buffer',
+                {},
+                { logger, reuploadRequest: this.sock!.updateMediaMessage },
+              ) as Buffer;
+
+              const transcript = await transcribeAudio(audioBuffer, 'audio/ogg');
+              content = `[Voice: ${transcript}]`;
+              logger.info({ jid: chatJid, transcript: transcript.slice(0, 80) }, 'Voice message transcribed');
+            } catch (err) {
+              logger.error({ err, jid: chatJid }, 'Failed to transcribe voice message');
+              continue;
+            }
+          }
 
           // Skip protocol messages with no text content (encryption keys, read receipts, etc.)
           if (!content) continue;
@@ -260,6 +283,21 @@ export class WhatsAppChannel implements Channel {
         'Failed to send, message queued',
       );
     }
+  }
+
+  async sendAudio(jid: string, audioBuffer: Buffer, ptt = true): Promise<void> {
+    if (!this.sock || !this.connected) {
+      logger.warn({ jid }, 'Cannot send audio: not connected');
+      return;
+    }
+
+    await this.sock.sendMessage(jid, {
+      audio: audioBuffer,
+      mimetype: 'audio/ogg; codecs=opus',
+      ptt, // push-to-talk = true → shows as voice note (not audio file)
+    });
+
+    logger.info({ jid, size: audioBuffer.length }, 'Sent voice note');
   }
 
   isConnected(): boolean {

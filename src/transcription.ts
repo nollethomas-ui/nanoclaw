@@ -15,7 +15,7 @@ let groqClient: Groq | null = null;
 
 function getGroqClient(): Groq {
   if (!groqClient) {
-    const env = readEnvFile();
+    const env = readEnvFile(['GROQ_API_KEY']);
     const apiKey = env.GROQ_API_KEY;
     if (!apiKey) {
       throw new Error('GROQ_API_KEY not found in .env file');
@@ -41,6 +41,7 @@ export async function transcribeAudio(audioBuffer: Buffer, mimeType = 'audio/ogg
 
   const text = typeof response === 'string' ? response.trim() : (response as { text: string }).text.trim();
 
-  logger.info({ text: text.slice(0, 100) }, 'Transcription complete');
+  // H3: Log only length, not content
+  logger.info({ length: text.length }, 'Transcription complete');
   return text;
 }

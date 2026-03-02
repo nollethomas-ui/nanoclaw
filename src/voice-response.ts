@@ -25,7 +25,7 @@ function getTTSClient(): textToSpeech.TextToSpeechClient {
  * Synthesize text to OGG/Opus audio using Google Cloud TTS.
  */
 export async function synthesizeSpeech(text: string): Promise<Buffer> {
-  const env = readEnvFile();
+  const env = readEnvFile(['GOOGLE_TTS_VOICE', 'GOOGLE_TTS_SPEAKING_RATE']);
   const voice = env.GOOGLE_TTS_VOICE || 'de-DE-Standard-B';
   const speakingRate = parseFloat(env.GOOGLE_TTS_SPEAKING_RATE || '1.0');
 
@@ -69,9 +69,9 @@ export async function synthesizeAndSend(
     try {
       const audioBuffer = await synthesizeSpeech(text);
       await channel.sendAudio(jid, audioBuffer, true);
-      logger.info({ jid, textLength: text.length }, 'Sent TTS voice response');
+      logger.info({ textLength: text.length }, 'Sent TTS voice response');
     } catch (err) {
-      logger.error({ err, jid }, 'TTS failed, text-only response sent');
+      logger.error({ err }, 'TTS failed, text-only response sent');
     }
   }
 }

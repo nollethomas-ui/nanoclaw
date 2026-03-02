@@ -20,6 +20,7 @@ import {
   STORE_DIR,
 } from '../config.js';
 import { getLastGroupSync, setLastGroupSync, updateChatName } from '../db.js';
+import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import {
   Channel,
@@ -29,6 +30,69 @@ import {
 } from '../types.js';
 
 const GROUP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// --- K1: Sender allowlist ---
+// Comma-separated phone numbers (without @s.whatsapp.net), e.g. "4917XXXXXXXX,4915XXXXXXXX"
+const ALLOWED_SENDERS = (() => {
+  const env = readEnvFile(['ALLOWED_SENDERS']);
+  const raw = env.ALLOWED_SENDERS || '';
+  if (!raw) return null; // null = no restriction (allowlist disabled)
+  const set = new Set(raw.split(',').map(s => s.trim()).filter(Boolean));
+  if (set.size > 0) logger.info({ count: set.size }, 'Sender allowlist active');
+  return set;
+})();
+
+function isSenderAllowed(senderJid: string): boolean {
+  if (!ALLOWED_SENDERS) return true; // no allowlist = allow all
+  const phone = senderJid.split('@')[0].split(':')[0];
+  return ALLOWED_SENDERS.has(phone);
+}
+
+// --- H6: Rate limiting per sender ---
+const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
+const RATE_LIMIT_MAX = (() => {
+  const env = readEnvFile(['RATE_LIMIT_MAX_PER_MIN']);
+  return parseInt(env.RATE_LIMIT_MAX_PER_MIN || '10', 10);
+})();
+
+const senderTimestamps = new Map<string, number[]>();
+
+function isRateLimited(senderJid: string): boolean {
+  const now = Date.now();
+  const phone = senderJid.split('@')[0].split(':')[0];
+  const timestamps = senderTimestamps.get(phone) || [];
+  // Remove entries outside the window
+  const recent = timestamps.filter(t => now - t < RATE_LIMIT_WINDOW_MS);
+  if (recent.length >= RATE_LIMIT_MAX) {
+    logger.warn({ sender: maskJid(phone) }, 'Rate limited');
+    return true;
+  }
+  recent.push(now);
+  senderTimestamps.set(phone, recent);
+  return false;
+}
+
+// --- H3: Mask JIDs in logs ---
+function maskJid(jidOrPhone: string): string {
+  const phone = jidOrPhone.split('@')[0].split(':')[0];
+  if (phone.length <= 4) return '****';
+  return phone.slice(0, 3) + '***' + phone.slice(-2);
+}
+
+// --- H2: Audio validation constants ---
+const MAX_AUDIO_SIZE = 10 * 1024 * 1024; // 10 MB
+const ALLOWED_AUDIO_MIMETYPES = ['audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-opus+ogg'];
+
+// --- H1: Voice input sanitization ---
+const MAX_TRANSCRIPT_LENGTH = 2000;
+
+function sanitizeTranscript(raw: string): string {
+  // Truncate to limit
+  let text = raw.slice(0, MAX_TRANSCRIPT_LENGTH);
+  // Strip control characters (keep basic whitespace)
+  text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  return text.trim();
+}
 
 export interface WhatsAppChannelOpts {
   onMessage: OnInboundMessage;
@@ -139,7 +203,7 @@ export class WhatsAppChannel implements Channel {
           const lidUser = this.sock.user.lid?.split(':')[0];
           if (lidUser && phoneUser) {
             this.lidToPhoneMap[lidUser] = `${phoneUser}@s.whatsapp.net`;
-            logger.debug({ lidUser, phoneUser }, 'LID to phone mapping set');
+            logger.debug('LID to phone mapping set');
           }
         }
 
@@ -198,6 +262,18 @@ export class WhatsAppChannel implements Channel {
         // Only deliver full message for registered groups
         const groups = this.opts.registeredGroups();
         if (groups[chatJid]) {
+          // K1: Check sender allowlist
+          const sender = msg.key.participant || msg.key.remoteJid || '';
+          if (!isSenderAllowed(sender)) {
+            logger.info({ sender: maskJid(sender) }, 'Blocked: sender not on allowlist');
+            continue;
+          }
+
+          // H6: Check rate limit
+          if (isRateLimited(sender)) {
+            continue;
+          }
+
           const isVoiceMessage = !!msg.message?.audioMessage;
           let content =
             msg.message?.conversation ||
@@ -209,6 +285,21 @@ export class WhatsAppChannel implements Channel {
           // Handle voice messages: download, transcribe, inject as [Voice: ...]
           if (isVoiceMessage && !content) {
             try {
+              // H2: Validate audio before downloading
+              const audioMsg = msg.message.audioMessage!;
+              const fileSize = audioMsg.fileLength ? Number(audioMsg.fileLength) : 0;
+              const mimetype = audioMsg.mimetype || 'audio/ogg';
+
+              if (fileSize > MAX_AUDIO_SIZE) {
+                logger.warn({ sender: maskJid(sender), size: fileSize }, 'Audio too large, skipping');
+                continue;
+              }
+
+              if (!ALLOWED_AUDIO_MIMETYPES.some(m => mimetype.startsWith(m))) {
+                logger.warn({ sender: maskJid(sender), mimetype }, 'Invalid audio MIME type, skipping');
+                continue;
+              }
+
               const audioBuffer = await downloadMediaMessage(
                 msg,
                 'buffer',
@@ -216,11 +307,21 @@ export class WhatsAppChannel implements Channel {
                 { logger, reuploadRequest: this.sock!.updateMediaMessage },
               ) as Buffer;
 
-              const transcript = await transcribeAudio(audioBuffer, 'audio/ogg');
-              content = `[Voice: ${transcript}]`;
-              logger.info({ jid: chatJid, transcript: transcript.slice(0, 80) }, 'Voice message transcribed');
+              // H2: Double-check actual buffer size
+              if (audioBuffer.length > MAX_AUDIO_SIZE) {
+                logger.warn({ sender: maskJid(sender), size: audioBuffer.length }, 'Downloaded audio too large');
+                continue;
+              }
+
+              const transcript = await transcribeAudio(audioBuffer, mimetype);
+              // H1: Sanitize transcript to prevent prompt injection
+              const sanitized = sanitizeTranscript(transcript);
+              content = `[Voice: ${sanitized}]`;
+              // H3: Log only length, not content or full JID
+              logger.info({ sender: maskJid(sender), transcriptLen: sanitized.length }, 'Voice message transcribed');
             } catch (err) {
-              logger.error({ err, jid: chatJid }, 'Failed to transcribe voice message');
+              // H3: Mask JID in error logs
+              logger.error({ err, sender: maskJid(sender) }, 'Failed to transcribe voice message');
               continue;
             }
           }
@@ -228,7 +329,6 @@ export class WhatsAppChannel implements Channel {
           // Skip protocol messages with no text content (encryption keys, read receipts, etc.)
           if (!content) continue;
 
-          const sender = msg.key.participant || msg.key.remoteJid || '';
           const senderName = msg.pushName || sender.split('@')[0];
 
           const fromMe = msg.key.fromMe || false;
@@ -267,19 +367,19 @@ export class WhatsAppChannel implements Channel {
     if (!this.connected) {
       this.outgoingQueue.push({ jid, text: prefixed });
       logger.info(
-        { jid, length: prefixed.length, queueSize: this.outgoingQueue.length },
+        { jid: maskJid(jid), length: prefixed.length, queueSize: this.outgoingQueue.length },
         'WA disconnected, message queued',
       );
       return;
     }
     try {
       await this.sock.sendMessage(jid, { text: prefixed });
-      logger.info({ jid, length: prefixed.length }, 'Message sent');
+      logger.info({ jid: maskJid(jid), length: prefixed.length }, 'Message sent');
     } catch (err) {
       // If send fails, queue it for retry on reconnect
       this.outgoingQueue.push({ jid, text: prefixed });
       logger.warn(
-        { jid, err, queueSize: this.outgoingQueue.length },
+        { jid: maskJid(jid), err, queueSize: this.outgoingQueue.length },
         'Failed to send, message queued',
       );
     }
@@ -287,7 +387,7 @@ export class WhatsAppChannel implements Channel {
 
   async sendAudio(jid: string, audioBuffer: Buffer, ptt = true): Promise<void> {
     if (!this.sock || !this.connected) {
-      logger.warn({ jid }, 'Cannot send audio: not connected');
+      logger.warn({ jid: maskJid(jid) }, 'Cannot send audio: not connected');
       return;
     }
 
@@ -297,7 +397,7 @@ export class WhatsAppChannel implements Channel {
       ptt, // push-to-talk = true → shows as voice note (not audio file)
     });
 
-    logger.info({ jid, size: audioBuffer.length }, 'Sent voice note');
+    logger.info({ jid: maskJid(jid), size: audioBuffer.length }, 'Sent voice note');
   }
 
   isConnected(): boolean {
@@ -366,10 +466,7 @@ export class WhatsAppChannel implements Channel {
     // Check local cache first
     const cached = this.lidToPhoneMap[lidUser];
     if (cached) {
-      logger.debug(
-        { lidJid: jid, phoneJid: cached },
-        'Translated LID to phone JID (cached)',
-      );
+      logger.debug('Translated LID to phone JID (cached)');
       return cached;
     }
 
@@ -379,10 +476,7 @@ export class WhatsAppChannel implements Channel {
       if (pn) {
         const phoneJid = `${pn.split('@')[0].split(':')[0]}@s.whatsapp.net`;
         this.lidToPhoneMap[lidUser] = phoneJid;
-        logger.info(
-          { lidJid: jid, phoneJid },
-          'Translated LID to phone JID (signalRepository)',
-        );
+        logger.info('Translated LID to phone JID (signalRepository)');
         return phoneJid;
       }
     } catch (err) {
@@ -405,7 +499,7 @@ export class WhatsAppChannel implements Channel {
         // Send directly — queued items are already prefixed by sendMessage
         await this.sock.sendMessage(item.jid, { text: item.text });
         logger.info(
-          { jid: item.jid, length: item.text.length },
+          { jid: maskJid(item.jid), length: item.text.length },
           'Queued message sent',
         );
       }

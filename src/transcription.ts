@@ -39,7 +39,7 @@ export async function transcribeAudio(audioBuffer: Buffer, mimeType = 'audio/ogg
     response_format: 'text',
   });
 
-  const text = typeof response === 'string' ? response.trim() : (response as { text: string }).text.trim();
+  const text = typeof response === 'string' ? response.trim() : (response as unknown as { text: string }).text.trim();
 
   // H3: Log only length, not content
   logger.info({ length: text.length }, 'Transcription complete');

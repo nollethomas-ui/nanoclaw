@@ -282,9 +282,10 @@ export class WhatsAppChannel implements Channel {
         // Only deliver full message for registered groups
         const groups = this.opts.registeredGroups();
         if (groups[chatJid]) {
-          // K1: Check sender allowlist
+          // K1: Check sender allowlist (bypass for own messages in self-chat/DM)
           const sender = msg.key.participant || msg.key.remoteJid || '';
-          if (!isSenderAllowed(sender)) {
+          const fromMe = msg.key.fromMe || false;
+          if (!fromMe && !isSenderAllowed(sender)) {
             logger.info({ sender: maskJid(sender) }, 'Blocked: sender not on allowlist');
             continue;
           }
@@ -350,8 +351,6 @@ export class WhatsAppChannel implements Channel {
           if (!content) continue;
 
           const senderName = msg.pushName || sender.split('@')[0];
-
-          const fromMe = msg.key.fromMe || false;
           // Detect bot messages: with own number, fromMe is reliable
           // since only the bot sends from that number.
           // With shared number, bot messages carry the assistant name prefix

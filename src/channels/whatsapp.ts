@@ -1,4 +1,3 @@
-import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -30,6 +29,14 @@ import {
 } from '../types.js';
 
 const GROUP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// --- Pairing code for headless authentication ---
+// Set WHATSAPP_PHONE in .env (e.g. "4917XXXXXXXX") to enable pairing code mode.
+// On QR event, the service requests a numeric pairing code instead of exiting.
+const WHATSAPP_PHONE = (() => {
+  const env = readEnvFile(['WHATSAPP_PHONE']);
+  return env.WHATSAPP_PHONE || '';
+})();
 
 // --- K1: Sender allowlist ---
 // Comma-separated phone numbers (without @s.whatsapp.net), e.g. "4917XXXXXXXX,4915XXXXXXXX"
@@ -150,13 +157,26 @@ export class WhatsAppChannel implements Channel {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        const msg =
-          'WhatsApp authentication required. Run /setup in Claude Code.';
-        logger.error(msg);
-        exec(
-          `osascript -e 'display notification "${msg}" with title "NanoClaw" sound name "Basso"'`,
-        );
-        setTimeout(() => process.exit(1), 1000);
+        if (WHATSAPP_PHONE) {
+          // Headless pairing code mode — request numeric code instead of QR scan
+          logger.info('QR received but WHATSAPP_PHONE set — requesting pairing code...');
+          this.sock.requestPairingCode(WHATSAPP_PHONE).then((code) => {
+            logger.info({ code }, '========================================');
+            logger.info({ code }, '  PAIRING CODE: ' + code);
+            logger.info({ code }, '========================================');
+            logger.info('  1. Open WhatsApp on your phone');
+            logger.info('  2. Settings → Linked Devices → Link a Device');
+            logger.info('  3. Tap "Link with phone number instead"');
+            logger.info('  4. Enter the code above');
+          }).catch((err) => {
+            logger.error({ err }, 'Failed to request pairing code');
+          });
+        } else {
+          const msg =
+            'WhatsApp authentication required. Set WHATSAPP_PHONE in .env for headless pairing, or run /setup in Claude Code.';
+          logger.error(msg);
+          setTimeout(() => process.exit(1), 1000);
+        }
       }
 
       if (connection === 'close') {

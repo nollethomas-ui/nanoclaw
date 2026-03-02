@@ -39,7 +39,9 @@ export async function transcribeAudio(audioBuffer: Buffer, mimeType = 'audio/ogg
     response_format: 'text',
   });
 
-  const text = typeof response === 'string' ? response.trim() : (response as unknown as { text: string }).text.trim();
+  // Groq SDK types say Transcription object, but response_format: 'text' returns a string at runtime
+  const raw = response as unknown;
+  const text = (typeof raw === 'string' ? raw : (raw as { text: string }).text).trim();
 
   // H3: Log only length, not content
   logger.info({ length: text.length }, 'Transcription complete');

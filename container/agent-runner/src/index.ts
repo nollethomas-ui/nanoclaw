@@ -432,7 +432,11 @@ async function runQuery(
         'TeamCreate', 'TeamDelete', 'SendMessage',
         'TodoWrite', 'ToolSearch', 'Skill',
         'NotebookEdit',
-        'mcp__nanoclaw__*'
+        'mcp__nanoclaw__*',
+        'mcp__gmail__*',
+        'mcp__roam__*',
+        'mcp__todoist__*',
+        'mcp__gsheets__*',
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -448,6 +452,45 @@ async function runQuery(
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
           },
         },
+        ...(fs.existsSync('/home/node/.gmail-mcp/credentials.json') ? {
+          gmail: {
+            command: 'npx',
+            args: ['-y', '@gongrzhe/server-gmail-autoauth-mcp'],
+            env: {
+              GMAIL_CREDENTIALS_PATH: '/home/node/.gmail-mcp/gcp-oauth.keys.json',
+              GMAIL_TOKEN_PATH: '/home/node/.gmail-mcp/credentials.json',
+            },
+          },
+        } : {}),
+        ...(sdkEnv.ROAM_API_TOKEN ? {
+          roam: {
+            command: 'npx',
+            args: ['-y', 'roam-research-mcp'],
+            env: {
+              ROAM_API_TOKEN: sdkEnv.ROAM_API_TOKEN || '',
+              ROAM_GRAPH_NAME: sdkEnv.ROAM_GRAPH_NAME || '',
+            },
+          },
+        } : {}),
+        ...(sdkEnv.TODOIST_API_TOKEN ? {
+          todoist: {
+            command: 'npx',
+            args: ['-y', '@abhiz123/todoist-mcp-server'],
+            env: {
+              TODOIST_API_TOKEN: sdkEnv.TODOIST_API_TOKEN || '',
+            },
+          },
+        } : {}),
+        ...(fs.existsSync('/home/node/.gsheets-mcp/gcp-oauth.keys.json') ? {
+          gsheets: {
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-gdrive'],
+            env: {
+              GDRIVE_CREDENTIALS_PATH: '/home/node/.gsheets-mcp/gcp-oauth.keys.json',
+              GDRIVE_TOKEN_PATH: '/home/node/.gsheets-mcp/credentials.json',
+            },
+          },
+        } : {}),
       },
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],

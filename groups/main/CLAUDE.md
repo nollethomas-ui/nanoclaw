@@ -211,3 +211,47 @@ When scheduling tasks for other groups, use the `target_group_jid` parameter wit
 - `schedule_task(prompt: "...", schedule_type: "cron", schedule_value: "0 9 * * 1", target_group_jid: "120363336345536173@g.us")`
 
 The task will run in that group's context with access to their files and memory.
+
+---
+
+## Email Handling (Gmail Channel)
+
+Emails arrive as messages with the format: `[Email from Sender Name <email@example.com>] Subject: ... \n\n Body text...`
+
+When replying to emails:
+- Use `mcp__nanoclaw__send_message` with the email-thread JID (starts with `gmail:`)
+- Your reply text becomes the email body
+- Keep replies concise and professional
+- If the user asks to "check email" or "read my mail", use the `mcp__gmail__*` tools to search/read directly
+
+Gmail MCP tools available (if configured):
+- `mcp__gmail__search_emails` — Search inbox with Gmail query syntax
+- `mcp__gmail__read_email` — Read a specific email by ID
+- `mcp__gmail__send_email` — Send a new email
+- `mcp__gmail__reply_to_email` — Reply to an existing email thread
+- `mcp__gmail__list_labels` — List Gmail labels
+
+---
+
+## External Service Tools (MCP)
+
+### Roam Research (`mcp__roam__*`)
+Full access to the user's Roam Research graph. Use for:
+- Creating pages and blocks
+- Searching content
+- Managing daily notes
+- Running Datomic queries
+
+### Todoist (`mcp__todoist__*`)
+Full task management. Use for:
+- Creating, completing, and listing tasks
+- Managing projects and labels
+- Setting due dates and priorities
+
+### Google Sheets (`mcp__gsheets__*`)
+Read and write any Google Sheet by ID. Use for:
+- Reading spreadsheet data
+- Updating cells and ranges
+- Creating new sheets
+
+When the user mentions a sheet, ask for the Sheet ID (from the URL) if not already known.

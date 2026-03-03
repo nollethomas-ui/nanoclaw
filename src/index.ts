@@ -203,8 +203,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
       logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
       if (text) {
-        // Check if any pending messages were voice-originated
-        const hasVoiceOrigin = missedMessages.some(m => m.content.startsWith('[Voice: '));
+        // Check if any messages (including piped ones) were voice-originated.
+        // Re-read from DB because missedMessages is a closure from the initial
+        // processGroupMessages call and won't include later piped voice messages.
+        const recentMessages = getMessagesSince(chatJid, previousCursor, ASSISTANT_NAME);
+        const hasVoiceOrigin = recentMessages.some(m => m.content.startsWith('[Voice: '));
         await synthesizeAndSend(channel, chatJid, text, hasVoiceOrigin);
         outputSentToUser = true;
       }

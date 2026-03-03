@@ -303,6 +303,14 @@ export class WhatsAppChannel implements Channel {
             msg.message?.videoMessage?.caption ||
             '';
 
+          // Skip bot-sent voice notes to prevent TTS feedback loop.
+          // Bot-sent audio comes from the PN-JID (@s.whatsapp.net),
+          // while user voice notes come from the LID-JID (@lid).
+          if (isVoiceMessage && fromMe && sender.endsWith('@s.whatsapp.net')) {
+            logger.debug({ sender: maskJid(sender) }, 'Skipping bot-sent voice note');
+            continue;
+          }
+
           // Handle voice messages: download, transcribe, inject as [Voice: ...]
           if (isVoiceMessage && !content) {
             try {

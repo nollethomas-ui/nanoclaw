@@ -1,0 +1,58 @@
+--- PATCH: Lightweight Dockerfile (no Chromium) ---
+---
+--- This patch removes Chromium and agent-browser from the NanoClaw agent container.
+--- Saves ~400-500MB RAM — critical for e2-micro (1GB).
+---
+--- Apply: Replace container/Dockerfile in the NanoClaw fork with this version.
+---
+
+=== container/Dockerfile ===
+
+FROM node:22-slim
+
+# System dependencies WITHOUT Chromium
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install claude-code globally (skip agent-browser)
+RUN npm install -g @anthropic-ai/claude-code
+
+WORKDIR /app
+COPY agent-runner/package*.json ./
+RUN npm install
+COPY agent-runner/ ./
+RUN npm run build
+
+# Workspace directories
+RUN mkdir -p /workspace/group /workspace/global /workspace/extra \
+    /workspace/ipc/messages /workspace/ipc/tasks /workspace/ipc/input
+
+# Copy entrypoint
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+USER node
+WORKDIR /workspace/group
+ENTRYPOINT ["/app/entrypoint.sh"]
+
+=== NOTES ===
+
+What's removed vs original:
+- chromium package (~400MB)
+- fonts-liberation, fonts-noto-color-emoji, libgbm1, libnss3, libatk-bridge2.0-0,
+  libgtk-3-0, libx11-xcb1, libxcomposite1, libxdamage1, libxrandr2, libasound2,
+  libpangocairo-1.0-0, libcups2, libdrm2, libxshmfence1
+- AGENT_BROWSER_EXECUTABLE_PATH env var
+- PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH env var
+- npm install -g agent-browser
+
+What's kept:
+- @anthropic-ai/claude-code (Claude Agent SDK)
+- curl, git (needed by agent)
+- agent-runner (core MCP + SDK integration)
+
+Trade-off: The agent loses web browsing capability. For our voice assistant
+use case, this is acceptable — web search is still available via the SDK's
+WebSearch/WebFetch tools, just no interactive browser automation.

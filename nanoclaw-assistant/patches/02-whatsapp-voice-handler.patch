@@ -1,0 +1,80 @@
+--- PATCH: WhatsApp Voice Message Handler ---
+---
+--- This patch modifies src/channels/whatsapp.ts to:
+--- 1. Detect audioMessage in incoming messages
+--- 2. Download audio via Baileys downloadMediaMessage()
+--- 3. Transcribe via Groq Whisper (src/transcription.ts)
+--- 4. Inject transcribed text as [Voice: <transcript>] into the message pipeline
+--- 5. Send TTS audio responses back for voice-originated messages
+---
+--- Apply manually: Merge these changes into the messages.upsert handler
+--- in src/channels/whatsapp.ts of the NanoClaw fork.
+---
+
+=== IMPORTS (add at top of whatsapp.ts) ===
+
+import { downloadMediaMessage } from '@whiskeysockets/baileys';
+import { transcribeAudio } from '../transcription.js';
+import { synthesizeAndSend } from '../voice-response.js';
+
+=== MESSAGE EXTRACTION (replace the content extraction block) ===
+
+// Original:
+//   const content = msg.message?.conversation
+//     || msg.message?.extendedTextMessage?.text
+//     || msg.message?.imageMessage?.caption
+//     || msg.message?.videoMessage?.caption
+//     || '';
+//   if (!content) continue;
+
+// New: Handle voice messages before the content check
+const isVoiceMessage = !!msg.message?.audioMessage;
+let content = msg.message?.conversation
+  || msg.message?.extendedTextMessage?.text
+  || msg.message?.imageMessage?.caption
+  || msg.message?.videoMessage?.caption
+  || '';
+
+if (isVoiceMessage && !content) {
+  try {
+    const audioBuffer = await downloadMediaMessage(
+      msg,
+      'buffer',
+      {},
+      { logger, reuploadRequest: this.sock!.updateMediaMessage }
+    ) as Buffer;
+
+    const transcript = await transcribeAudio(audioBuffer, 'audio/ogg');
+    content = `[Voice: ${transcript}]`;
+    logger.info({ jid: chatJid, transcript: transcript.slice(0, 80) }, 'Voice message transcribed');
+  } catch (err) {
+    logger.error({ err, jid: chatJid }, 'Failed to transcribe voice message');
+    continue;
+  }
+}
+
+if (!content) continue;
+
+=== RESPONSE ROUTING (in the sendMessage method or response callback) ===
+
+// Add this method to the WhatsAppChannel class:
+
+async sendAudio(jid: string, audioBuffer: Buffer, ptt = true): Promise<void> {
+  if (!this.sock || !this.isConnected()) {
+    logger.warn({ jid }, 'Cannot send audio: not connected');
+    return;
+  }
+
+  await this.sock.sendMessage(jid, {
+    audio: audioBuffer,
+    mimetype: 'audio/ogg; codecs=opus',
+    ptt,  // push-to-talk = true → shows as voice note (not audio file)
+  });
+
+  logger.info({ jid, size: audioBuffer.length }, 'Sent voice note');
+}
+
+=== CHANNEL INTERFACE (add to src/types.ts Channel interface) ===
+
+// Add optional sendAudio to Channel interface:
+sendAudio?(jid: string, audioBuffer: Buffer, ptt?: boolean): Promise<void>;

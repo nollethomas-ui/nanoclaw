@@ -1,0 +1,35 @@
+{
+  "voice": {
+    "stt": {
+      "provider": "groq",
+      "model": "whisper-large-v3",
+      "language": "de"
+    },
+    "tts": {
+      "provider": "google",
+      "google": {
+        "voice": "de-DE-Standard-B",
+        "speakingRate": 1.0
+      },
+      "elevenlabs": {
+        "voiceId": "",
+        "modelId": "eleven_multilingual_v2"
+      }
+    }
+  },
+  "channels": {
+    "whatsapp": {
+      "enabled": true,
+      "voiceEnabled": true
+    },
+    "telegram": {
+      "enabled": false,
+      "voiceEnabled": true
+    }
+  },
+  "assistant": {
+    "name": "Nano",
+    "containerTimeout": 300000,
+    "maxConcurrentContainers": 1
+  }
+}

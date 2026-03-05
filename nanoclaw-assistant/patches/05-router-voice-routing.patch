@@ -1,0 +1,41 @@
+--- PATCH: Router Voice Routing ---
+---
+--- Modifies src/index.ts processGroupMessages callback to route
+--- voice-originated messages through TTS before sending.
+---
+--- The key insight: When a message starts with "[Voice: ", it was
+--- voice-originated. The agent response should be sent as both text
+--- AND voice note.
+---
+
+=== IMPORTS (add to src/index.ts) ===
+
+import { synthesizeAndSend } from './voice-response.js';
+
+=== MODIFY processGroupMessages response callback ===
+
+// In the runAgent() callback where results are sent back to the user:
+//
+// Original pattern:
+//   const cleaned = stripInternalTags(resultText);
+//   await channel.sendMessage(chatJid, cleaned);
+//
+// Replace with:
+
+const cleaned = stripInternalTags(resultText);
+
+// Check if any of the messages that triggered this response were voice messages
+const hasVoiceOrigin = pendingMessages.some(m => m.content.startsWith('[Voice: '));
+
+await synthesizeAndSend(channel, chatJid, cleaned, hasVoiceOrigin);
+
+=== TRACKING VOICE ORIGIN ===
+
+// The voice origin flag is embedded in the message content by whatsapp.ts:
+//   content = `[Voice: ${transcript}]`
+//
+// This means the agent sees: <message sender="User">Voice: Hello world</message>
+// The agent responds normally, and the router checks if any triggering message
+// had the [Voice: prefix to decide whether to also send audio.
+//
+// This approach avoids modifying the NewMessage interface or the DB schema.

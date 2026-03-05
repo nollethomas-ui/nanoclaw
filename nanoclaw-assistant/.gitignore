@@ -1,0 +1,38 @@
+# Environment & secrets
+.env
+*.json
+!package.json
+!tsconfig.json
+!config/settings.json
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Voice middleware build
+voice-middleware/node_modules/
+voice-middleware/dist/
+
+# NanoClaw runtime
+store/
+groups/
+*.db
+*.db-wal
+*.db-shm
+
+# GCP credentials
+config/gcp-service-account.json
+config/credentials.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log

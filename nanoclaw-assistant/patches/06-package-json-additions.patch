@@ -1,0 +1,18 @@
+--- PATCH: package.json additions ---
+---
+--- Add Groq SDK and Google Cloud TTS to the NanoClaw host process dependencies.
+---
+--- Apply: Run these commands in the NanoClaw fork root:
+---
+
+npm install groq-sdk @google-cloud/text-to-speech
+
+--- This adds:
+---   "groq-sdk": "^0.9.0"
+---   "@google-cloud/text-to-speech": "^5.5.0"
+---
+--- to the host process package.json (not the container's).
+---
+--- The voice transcription and TTS happen on the HOST process,
+--- not inside the agent container. This keeps the container lightweight
+--- and avoids passing audio through Docker stdin/stdout.

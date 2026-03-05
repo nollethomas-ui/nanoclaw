@@ -1,0 +1,83 @@
+[Unit]
+Description=NanoClaw AI Assistant (WhatsApp + Telegram Voice Bot)
+Documentation=https://github.com/nollethomas-ui/nanoclaw
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=nanoclaw
+Group=nanoclaw
+WorkingDirectory=/opt/nanoclaw/nanoclaw
+
+# Fetch secrets from Secret Manager at service start (K5: no static secrets on disk)
+# Required secrets use && (fail = service won't start)
+# Optional secrets use || ...="" (fail = empty string, service still starts)
+ExecStartPre=/bin/bash -c '\
+  ENV_FILE=/run/nanoclaw/secrets.env && \
+  mkdir -p /run/nanoclaw && \
+  ANTHROPIC_KEY=$(/usr/bin/gcloud secrets versions access latest --secret=ANTHROPIC_API_KEY --project=nanoclaw-tnoll 2>/dev/null | tr -d "\\r\\n") && \
+  GROQ_KEY=$(/usr/bin/gcloud secrets versions access latest --secret=GROQ_API_KEY --project=nanoclaw-tnoll 2>/dev/null | tr -d "\\r\\n") && \
+  TODOIST_KEY=$(/usr/bin/gcloud secrets versions access latest --secret=TODOIST_API_TOKEN --project=nanoclaw-tnoll 2>/dev/null | tr -d "\\r\\n") || TODOIST_KEY="" ; \
+  ELEVENLABS_KEY=$(/usr/bin/gcloud secrets versions access latest --secret=ELEVENLABS_API_KEY --project=nanoclaw-tnoll 2>/dev/null | tr -d "\\r\\n") || ELEVENLABS_KEY="" ; \
+  ROAM_TOKEN=$(/usr/bin/gcloud secrets versions access latest --secret=ROAM_API_TOKEN --project=nanoclaw-tnoll 2>/dev/null | tr -d "\\r\\n") || ROAM_TOKEN="" ; \
+  ROAM_GRAPH=$(/usr/bin/gcloud secrets versions access latest --secret=ROAM_GRAPH_NAME --project=nanoclaw-tnoll 2>/dev/null | tr -d "\\r\\n") || ROAM_GRAPH="" ; \
+  TELEGRAM_TOKEN=$(/usr/bin/gcloud secrets versions access latest --secret=TELEGRAM_BOT_TOKEN --project=nanoclaw-tnoll 2>/dev/null | tr -d "\\r\\n") || TELEGRAM_TOKEN="" ; \
+  echo "ANTHROPIC_API_KEY=${ANTHROPIC_KEY}" > "$ENV_FILE" && \
+  echo "GROQ_API_KEY=${GROQ_KEY}" >> "$ENV_FILE" && \
+  echo "TODOIST_API_TOKEN=${TODOIST_KEY}" >> "$ENV_FILE" && \
+  echo "ELEVENLABS_API_KEY=${ELEVENLABS_KEY}" >> "$ENV_FILE" && \
+  echo "ROAM_API_TOKEN=${ROAM_TOKEN}" >> "$ENV_FILE" && \
+  echo "ROAM_GRAPH_NAME=${ROAM_GRAPH}" >> "$ENV_FILE" && \
+  echo "TELEGRAM_BOT_TOKEN=${TELEGRAM_TOKEN}" >> "$ENV_FILE" && \
+  chmod 600 "$ENV_FILE" && \
+  chown nanoclaw:nanoclaw "$ENV_FILE"'
+
+# Static config (non-secret settings)
+EnvironmentFile=/opt/nanoclaw/nanoclaw/.env
+# Runtime secrets from Secret Manager (overrides .env values)
+EnvironmentFile=/run/nanoclaw/secrets.env
+
+# Memory optimization for e2-micro (1GB RAM)
+Environment=MAX_CONCURRENT_CONTAINERS=1
+Environment=CONTAINER_TIMEOUT=300000
+Environment=NODE_OPTIONS=--max-old-space-size=256
+
+# Start NanoClaw
+ExecStart=/usr/bin/node dist/index.js
+
+# Auto-restart on failure
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nanoclaw
+
+# Security hardening (H4)
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/nanoclaw
+ReadWritePaths=/run/nanoclaw
+PrivateTmp=true
+ProtectHome=read-only
+ReadWritePaths=/home/nanoclaw/.gmail-mcp
+ReadWritePaths=/home/nanoclaw/.gsheets-mcp
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=false
+RestrictSUIDSGID=true
+MemoryMax=512M
+CPUQuota=80%
+
+# Transient runtime directory for secrets (auto-cleaned on stop)
+RuntimeDirectory=nanoclaw
+RuntimeDirectoryMode=0700
+
+[Install]
+WantedBy=multi-user.target

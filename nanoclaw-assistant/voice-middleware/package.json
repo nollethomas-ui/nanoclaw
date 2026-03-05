@@ -1,0 +1,28 @@
+{
+  "name": "nanoclaw-voice-middleware",
+  "version": "1.0.0",
+  "description": "Voice middleware for NanoClaw: Groq Whisper STT + Google Cloud TTS + ElevenLabs",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@google-cloud/text-to-speech": "^5.5.0",
+    "groq-sdk": "^0.9.0",
+    "form-data": "^4.0.0",
+    "node-fetch": "^3.3.2",
+    "pino": "^9.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

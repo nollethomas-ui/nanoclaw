@@ -17,13 +17,13 @@ echo -e "Date: $(date)"
 echo ""
 
 # Step 1: Stop service
-echo -e "${YELLOW}[1/5] Stopping NanoClaw...${NC}"
+echo -e "${YELLOW}[1/6] Stopping NanoClaw...${NC}"
 systemctl stop nanoclaw || true
 sleep 2
 echo -e "${GREEN}Stopped.${NC}"
 
 # Step 2: Git pull
-echo -e "\n${YELLOW}[2/5] Pulling latest changes...${NC}"
+echo -e "\n${YELLOW}[2/6] Pulling latest changes...${NC}"
 cd "$NANOCLAW_DIR"
 sudo -u nanoclaw git fetch origin
 sudo -u nanoclaw git pull origin voice-support
@@ -31,18 +31,26 @@ echo -e "${GREEN}Git pull complete.${NC}"
 git log --oneline -5
 
 # Step 3: npm install (in case dependencies changed)
-echo -e "\n${YELLOW}[3/5] Installing dependencies...${NC}"
+echo -e "\n${YELLOW}[3/6] Installing dependencies...${NC}"
 sudo -u nanoclaw npm install --no-audit --no-fund 2>&1 | tail -3
 echo -e "${GREEN}Dependencies installed.${NC}"
 
 # Step 4: TypeScript build
-echo -e "\n${YELLOW}[4/5] Building TypeScript...${NC}"
-sudo -u nanoclaw NODE_OPTIONS='--max-old-space-size=768' npx tsc
+echo -e "\n${YELLOW}[4/6] Building TypeScript...${NC}"
+echo -e "  (This may take 30-40 min on e2-micro with swap)"
+sudo -u nanoclaw NODE_OPTIONS='--max-old-space-size=1536' npx tsc --skipLibCheck
 echo -e "${GREEN}Build complete.${NC}"
 
-# Step 5: Update systemd + restart
-echo -e "\n${YELLOW}[5/5] Updating systemd service + restarting...${NC}"
+# Step 5: Ensure credential directories exist
+echo -e "\n${YELLOW}[5/6] Ensuring credential directories...${NC}"
+mkdir -p /home/nanoclaw/.gmail-mcp /home/nanoclaw/.gsheets-mcp
+chown nanoclaw:nanoclaw /home/nanoclaw/.gmail-mcp /home/nanoclaw/.gsheets-mcp
+echo -e "${GREEN}Done.${NC}"
+
+# Step 6: Update systemd + restart
+echo -e "\n${YELLOW}[6/6] Updating systemd service + restarting...${NC}"
 cp "${NANOCLAW_DIR}/nanoclaw-assistant/deploy/nanoclaw.service" /etc/systemd/system/nanoclaw.service
+chmod +x "${NANOCLAW_DIR}/nanoclaw-assistant/deploy/fetch-secrets.sh"
 systemctl daemon-reload
 systemctl start nanoclaw
 sleep 3
@@ -64,7 +72,7 @@ echo -e "  - Roam Research MCP (setup-roam.sh)"
 echo -e "  - Telegram Bot channel (setup-telegram.sh)"
 echo -e "  - Gmail MCP (setup-gmail.sh)"
 echo -e "  - Google Sheets MCP (setup-gsheets.sh)"
-echo -e "  - Robust ExecStartPre (optional secrets won't block service start)"
+echo -e "  - External fetch-secrets.sh (snap gcloud compatible, required/optional secrets)"
 echo -e ""
 echo -e "Activate integrations:"
 echo -e "  ${YELLOW}sudo bash .../deploy/setup-todoist.sh <TOKEN>${NC}"

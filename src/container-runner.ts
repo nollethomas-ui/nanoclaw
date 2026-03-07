@@ -225,13 +225,20 @@ function buildVolumeMounts(
  * Secrets are never written to disk or mounted as files.
  */
 function readSecrets(): Record<string, string> {
-  return readEnvFile([
+  const keys = [
     'CLAUDE_CODE_OAUTH_TOKEN',
     'ANTHROPIC_API_KEY',
     'ROAM_API_TOKEN',
     'ROAM_GRAPH_NAME',
     'TODOIST_API_TOKEN',
-  ]);
+  ];
+  const fileSecrets = readEnvFile(keys);
+  const result: Record<string, string> = {};
+  for (const key of keys) {
+    const value = fileSecrets[key] || process.env[key];
+    if (value) result[key] = value;
+  }
+  return result;
 }
 
 function buildContainerArgs(

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Nano</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="state-idle">
+
+    <!-- Main layout: fills viewport -->
+    <div class="main-layout">
+
+        <!-- HAL 9000 Unit -->
+        <div class="hal-unit">
+            <div class="hal-label">
+                <span class="hal-label-text">Nano</span>
+            </div>
+            <div class="hal-eye-section" id="orbContainer">
+                <div class="hal-eye-bezel">
+                    <div class="hal-eye-ring">
+                        <div class="hal-eye" id="halEye">
+                            <div class="hal-eye-iris"></div>
+                            <div class="hal-eye-pupil"></div>
+                            <div class="hal-eye-highlight"></div>
+                            <div class="hal-eye-highlight-small"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="status" id="status">Verbinde...</div>
+            </div>
+        </div>
+
+        <!-- Transcript (live speech) -->
+        <div class="transcript-area">
+            <div class="current-transcript" id="transcript"></div>
+        </div>
+
+        <!-- Response area: scrollable, shows conversation -->
+        <div class="response-area" id="history"></div>
+
+    </div>
+
+    <!-- Bottom bar: fixed text input -->
+    <div class="bottom-bar" id="textFallback">
+        <input type="text" id="textInput" placeholder="Nachricht eingeben..." autocomplete="off">
+        <button id="textSend">Senden</button>
+    </div>
+
+    <!-- Error Toast -->
+    <div class="error-toast" id="errorToast"></div>
+
+    <!-- Audio -->
+    <audio id="ttsAudio" preload="none"></audio>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

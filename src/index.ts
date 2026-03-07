@@ -9,9 +9,11 @@ import {
   TELEGRAM_BOT_TOKEN,
   TELEGRAM_ONLY,
   TRIGGER_PATTERN,
+  WEB_UI_PORT,
 } from './config.js';
 import { GmailChannel } from './channels/gmail.js';
 import { TelegramChannel } from './channels/telegram.js';
+import { WebChannel } from './channels/web.js';
 import { WhatsAppChannel } from './channels/whatsapp.js';
 import {
   ContainerOutput,
@@ -503,6 +505,13 @@ async function main(): Promise<void> {
   const gmail = new GmailChannel(channelOpts);
   channels.push(gmail);
   await gmail.connect();
+
+  // Web UI channel (WebSocket-based, activated by WEB_UI_PORT env var)
+  if (WEB_UI_PORT > 0) {
+    const web = new WebChannel(WEB_UI_PORT, channelOpts);
+    channels.push(web);
+    await web.connect();
+  }
 
   // Start subsystems (independently of connection handler)
   startSchedulerLoop({

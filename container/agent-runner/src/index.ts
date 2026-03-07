@@ -437,6 +437,7 @@ async function runQuery(
         'mcp__roam__*',
         'mcp__todoist__*',
         'mcp__gsheets__*',
+        'mcp__calendar__*',
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -488,6 +489,16 @@ async function runQuery(
             env: {
               GDRIVE_CREDENTIALS_PATH: '/home/node/.gsheets-mcp/gcp-oauth.keys.json',
               GDRIVE_TOKEN_PATH: '/home/node/.gsheets-mcp/credentials.json',
+            },
+          },
+        } : {}),
+        ...(fs.existsSync('/home/node/.gcalendar-mcp/credentials.json') ? {
+          calendar: {
+            command: 'npx',
+            args: ['-y', '@cocal/google-calendar-mcp'],
+            env: {
+              GOOGLE_OAUTH_CREDENTIALS: '/home/node/.gcalendar-mcp/gcp-oauth.keys.json',
+              GOOGLE_CALENDAR_MCP_TOKEN_PATH: '/home/node/.gcalendar-mcp/credentials.json',
             },
           },
         } : {}),

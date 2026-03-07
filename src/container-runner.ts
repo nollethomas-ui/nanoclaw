@@ -207,6 +207,16 @@ function buildVolumeMounts(
     });
   }
 
+  // Google Calendar credentials directory
+  const gcalendarDir = path.join(os.homedir(), '.gcalendar-mcp');
+  if (fs.existsSync(gcalendarDir)) {
+    mounts.push({
+      hostPath: gcalendarDir,
+      containerPath: '/home/node/.gcalendar-mcp',
+      readonly: false, // MCP may need to refresh OAuth tokens
+    });
+  }
+
   // Additional mounts validated against external allowlist (tamper-proof from containers)
   if (group.containerConfig?.additionalMounts) {
     const validatedMounts = validateAdditionalMounts(

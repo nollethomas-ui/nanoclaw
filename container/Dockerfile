@@ -12,6 +12,16 @@ RUN apt-get update && apt-get install -y \
 # Install claude-code globally (skip agent-browser)
 RUN npm install -g @anthropic-ai/claude-code
 
+# Pre-install MCP server packages globally to avoid npx download timeouts
+# on resource-constrained instances (e2-micro). These are loaded via npx -y
+# in index.ts but npx will use the global install instead of downloading.
+RUN npm install -g \
+    @gongrzhe/server-gmail-autoauth-mcp \
+    roam-research-mcp \
+    @hoffination/mcp-todoist \
+    @modelcontextprotocol/server-gdrive \
+    @cocal/google-calendar-mcp
+
 WORKDIR /app
 COPY agent-runner/package*.json ./
 RUN npm install

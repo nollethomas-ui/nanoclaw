@@ -17,6 +17,7 @@ WorkingDirectory=/opt/nanoclaw/nanoclaw
 # + prefix = run as root (required for snap gcloud + Secret Manager access)
 # External script handles required vs optional secrets gracefully
 ExecStartPre=+/bin/bash /opt/nanoclaw/nanoclaw/nanoclaw-assistant/deploy/fetch-secrets.sh
+ExecStartPre=+/bin/bash /opt/nanoclaw/nanoclaw/nanoclaw-assistant/deploy/refresh-oauth-tokens.sh
 
 # Static config (non-secret settings)
 EnvironmentFile=/opt/nanoclaw/nanoclaw/.env
@@ -25,7 +26,7 @@ EnvironmentFile=/opt/nanoclaw/nanoclaw/.env
 EnvironmentFile=-/run/nanoclaw/secrets.env
 
 # Memory optimization for e2-micro (1GB RAM)
-Environment=MAX_CONCURRENT_CONTAINERS=1
+Environment=MAX_CONCURRENT_CONTAINERS=2
 Environment=CONTAINER_TIMEOUT=300000
 Environment=NODE_OPTIONS=--max-old-space-size=256
 

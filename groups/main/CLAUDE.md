@@ -234,22 +234,29 @@ The task will run in that group's context with access to their files and memory.
 
 ---
 
-## Email Handling (Gmail Channel)
+## E-Mail Delegation (Multi-Group Architektur)
 
-Emails arrive as messages with the format: `[Email from Sender Name <email@example.com>] Subject: ... \n\n Body text...`
+E-Mail-Anfragen werden an den spezialisierten *Gmail Agent* delegiert.
 
-When replying to emails:
+Wenn der User nach E-Mails fragt (lesen, senden, suchen, Drafts), delegiere so:
+1. Nutze `mcp__nanoclaw__send_message` an die Gmail-Agent-Gruppe
+2. Formuliere die Anfrage klar und praezise fuer den Gmail-Agenten
+3. Warte auf die Antwort und leite das Ergebnis an den User weiter
+
+Typische Trigger-Woerter: E-Mail, Mail, Inbox, Posteingang, senden, schreiben an, weiterleiten
+
+*Hinweis:* Die Gmail-Agent-Gruppe muss in `available_groups.json` oder `registered_groups` registriert sein. Suche nach "Gmail Agent" oder "gmail-agent" Folder.
+
+Falls die Gmail-Gruppe nicht erreichbar ist, informiere den User: "Der Gmail-Agent ist momentan nicht verfuegbar."
+
+## Email Handling (Gmail Channel — Inbound)
+
+Emails that arrive via the Gmail Channel appear as messages with the format: `[Email from Sender Name <email@example.com>] Subject: ... \n\n Body text...`
+
+When replying to these inbound emails:
 - Use `mcp__nanoclaw__send_message` with the email-thread JID (starts with `gmail:`)
 - Your reply text becomes the email body
 - Keep replies concise and professional
-- If the user asks to "check email" or "read my mail", use the `mcp__gmail__*` tools to search/read directly
-
-Gmail MCP tools available (if configured):
-- `mcp__gmail__search_emails` — Search inbox with Gmail query syntax
-- `mcp__gmail__read_email` — Read a specific email by ID
-- `mcp__gmail__send_email` — Send a new email
-- `mcp__gmail__reply_to_email` — Reply to an existing email thread
-- `mcp__gmail__list_labels` — List Gmail labels
 
 ---
 
@@ -267,11 +274,3 @@ Full task management. Use for:
 - Creating, completing, and listing tasks
 - Managing projects and labels
 - Setting due dates and priorities
-
-### Google Sheets (`mcp__gsheets__*`)
-Read and write any Google Sheet by ID. Use for:
-- Reading spreadsheet data
-- Updating cells and ranges
-- Creating new sheets
-
-When the user mentions a sheet, ask for the Sheet ID (from the URL) if not already known.

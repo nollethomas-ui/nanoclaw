@@ -349,6 +349,112 @@ function waitForIpcMessage(): Promise<string | null> {
 }
 
 /**
+ * Build MCP server configuration based on AGENT_ROLE.
+ *
+ * AGENT_ROLE controls which MCP servers are loaded per container:
+ *   - 'general' (default): All available MCPs (legacy behavior)
+ *   - 'orchestrator': NanoClaw IPC + Roam + Todoist (no Gmail/GSheets/Calendar)
+ *   - 'gmail': NanoClaw IPC + Gmail only
+ *   - 'calendar': NanoClaw IPC + Google Calendar only
+ *   - 'todoist': NanoClaw IPC + Todoist only
+ *   - 'roam': NanoClaw IPC + Roam only
+ *
+ * This enables the multi-group architecture where each WhatsApp group
+ * runs a specialized agent with only its needed MCP server (~3s startup
+ * instead of ~20s for all 6 MCPs).
+ */
+function buildMcpServers(
+  mcpServerPath: string,
+  containerInput: ContainerInput,
+  sdkEnv: Record<string, string | undefined>,
+): Record<string, { command: string; args: string[]; env: Record<string, string> }> {
+  const agentRole = sdkEnv.AGENT_ROLE || 'general';
+  log(`Building MCP servers for AGENT_ROLE=${agentRole}`);
+
+  const servers: Record<string, { command: string; args: string[]; env: Record<string, string> }> = {};
+
+  // NanoClaw IPC — always loaded (inter-group communication)
+  servers.nanoclaw = {
+    command: 'node',
+    args: [mcpServerPath],
+    env: {
+      NANOCLAW_CHAT_JID: containerInput.chatJid,
+      NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
+      NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
+    },
+  };
+
+  // Gmail MCP
+  if ((agentRole === 'general' || agentRole === 'gmail') &&
+      fs.existsSync('/home/node/.gmail-mcp/credentials.json')) {
+    servers.gmail = {
+      command: 'gmail-mcp',
+      args: [],
+      env: {
+        GMAIL_CREDENTIALS_PATH: '/home/node/.gmail-mcp/gcp-oauth.keys.json',
+        GMAIL_TOKEN_PATH: '/home/node/.gmail-mcp/credentials.json',
+      },
+    };
+  }
+
+  // Roam Research MCP
+  if ((agentRole === 'general' || agentRole === 'orchestrator' || agentRole === 'roam') &&
+      sdkEnv.ROAM_API_TOKEN) {
+    servers.roam = {
+      command: 'roam-research-mcp',
+      args: [],
+      env: {
+        ROAM_API_TOKEN: sdkEnv.ROAM_API_TOKEN || '',
+        ROAM_GRAPH_NAME: sdkEnv.ROAM_GRAPH_NAME || '',
+      },
+    };
+  }
+
+  // Todoist MCP
+  if ((agentRole === 'general' || agentRole === 'orchestrator' || agentRole === 'todoist') &&
+      sdkEnv.TODOIST_API_TOKEN) {
+    servers.todoist = {
+      command: 'mcp-todoist',
+      args: [],
+      env: {
+        TODOIST_API_TOKEN: sdkEnv.TODOIST_API_TOKEN || '',
+      },
+    };
+  }
+
+  // Google Sheets MCP
+  if ((agentRole === 'general' || agentRole === 'gsheets') &&
+      fs.existsSync('/home/node/.gsheets-mcp/gcp-oauth.keys.json')) {
+    servers.gsheets = {
+      command: 'mcp-server-gdrive',
+      args: [],
+      env: {
+        GDRIVE_CREDENTIALS_PATH: '/home/node/.gsheets-mcp/gcp-oauth.keys.json',
+        GDRIVE_TOKEN_PATH: '/home/node/.gsheets-mcp/credentials.json',
+      },
+    };
+  }
+
+  // Google Calendar MCP
+  if ((agentRole === 'general' || agentRole === 'calendar') &&
+      fs.existsSync('/home/node/.gcalendar-mcp/credentials.json')) {
+    servers.calendar = {
+      command: 'google-calendar-mcp',
+      args: [],
+      env: {
+        GOOGLE_OAUTH_CREDENTIALS: '/home/node/.gcalendar-mcp/gcp-oauth.keys.json',
+        GOOGLE_CALENDAR_MCP_TOKEN_PATH: '/home/node/.gcalendar-mcp/credentials.json',
+      },
+    };
+  }
+
+  const serverNames = Object.keys(servers);
+  log(`MCP servers to load: ${serverNames.join(', ')} (${serverNames.length} total)`);
+
+  return servers;
+}
+
+/**
  * Run a single query and stream results via writeOutput.
  * Uses MessageStream (AsyncIterable) to keep isSingleUserTurn=false,
  * allowing agent teams subagents to run to completion.
@@ -443,66 +549,7 @@ async function runQuery(
       permissionMode: 'bypassPermissions',
       allowDangerouslySkipPermissions: true,
       settingSources: ['project', 'user'],
-      mcpServers: {
-        nanoclaw: {
-          command: 'node',
-          args: [mcpServerPath],
-          env: {
-            NANOCLAW_CHAT_JID: containerInput.chatJid,
-            NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
-            NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
-          },
-        },
-        ...(fs.existsSync('/home/node/.gmail-mcp/credentials.json') ? {
-          gmail: {
-            command: 'gmail-mcp',
-            args: [],
-            env: {
-              GMAIL_CREDENTIALS_PATH: '/home/node/.gmail-mcp/gcp-oauth.keys.json',
-              GMAIL_TOKEN_PATH: '/home/node/.gmail-mcp/credentials.json',
-            },
-          },
-        } : {}),
-        ...(sdkEnv.ROAM_API_TOKEN ? {
-          roam: {
-            command: 'roam-research-mcp',
-            args: [],
-            env: {
-              ROAM_API_TOKEN: sdkEnv.ROAM_API_TOKEN || '',
-              ROAM_GRAPH_NAME: sdkEnv.ROAM_GRAPH_NAME || '',
-            },
-          },
-        } : {}),
-        ...(sdkEnv.TODOIST_API_TOKEN ? {
-          todoist: {
-            command: 'mcp-todoist',
-            args: [],
-            env: {
-              TODOIST_API_TOKEN: sdkEnv.TODOIST_API_TOKEN || '',
-            },
-          },
-        } : {}),
-        ...(fs.existsSync('/home/node/.gsheets-mcp/gcp-oauth.keys.json') ? {
-          gsheets: {
-            command: 'mcp-server-gdrive',
-            args: [],
-            env: {
-              GDRIVE_CREDENTIALS_PATH: '/home/node/.gsheets-mcp/gcp-oauth.keys.json',
-              GDRIVE_TOKEN_PATH: '/home/node/.gsheets-mcp/credentials.json',
-            },
-          },
-        } : {}),
-        ...(fs.existsSync('/home/node/.gcalendar-mcp/credentials.json') ? {
-          calendar: {
-            command: 'google-calendar-mcp',
-            args: [],
-            env: {
-              GOOGLE_OAUTH_CREDENTIALS: '/home/node/.gcalendar-mcp/gcp-oauth.keys.json',
-              GOOGLE_CALENDAR_MCP_TOKEN_PATH: '/home/node/.gcalendar-mcp/credentials.json',
-            },
-          },
-        } : {}),
-      },
+      mcpServers: buildMcpServers(mcpServerPath, containerInput, sdkEnv),
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
         PreToolUse: [{ matcher: 'Bash', hooks: [createSanitizeBashHook()] }],

@@ -251,6 +251,48 @@ function readSecrets(): Record<string, string> {
   return result;
 }
 
+/**
+ * Read group-specific environment variables from groups/{folder}/.env.
+ * Used for per-group configuration like AGENT_ROLE.
+ * These are merged into the secrets passed to the container.
+ */
+function readGroupEnv(groupFolder: string): Record<string, string> {
+  const groupEnvPath = path.join(GROUPS_DIR, groupFolder, '.env');
+  if (!fs.existsSync(groupEnvPath)) return {};
+
+  const result: Record<string, string> = {};
+  try {
+    const content = fs.readFileSync(groupEnvPath, 'utf-8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx === -1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      let value = trimmed.slice(eqIdx + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (value) result[key] = value;
+    }
+    if (Object.keys(result).length > 0) {
+      logger.info(
+        { group: groupFolder, keys: Object.keys(result) },
+        'Loaded group-specific env',
+      );
+    }
+  } catch (err) {
+    logger.warn(
+      { group: groupFolder, err },
+      'Failed to read group .env file',
+    );
+  }
+  return result;
+}
+
 function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
@@ -338,7 +380,8 @@ export async function runContainerAgent(
     let stderrTruncated = false;
 
     // Pass secrets via stdin (never written to disk or mounted as files)
-    input.secrets = readSecrets();
+    // Merge global secrets with group-specific env (AGENT_ROLE, etc.)
+    input.secrets = { ...readSecrets(), ...readGroupEnv(group.folder) };
     container.stdin.write(JSON.stringify(input));
     container.stdin.end();
     // Remove secrets from input so they don't appear in logs

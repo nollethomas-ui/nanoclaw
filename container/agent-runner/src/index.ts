@@ -455,8 +455,8 @@ async function runQuery(
         },
         ...(fs.existsSync('/home/node/.gmail-mcp/credentials.json') ? {
           gmail: {
-            command: 'npx',
-            args: ['-y', '@gongrzhe/server-gmail-autoauth-mcp'],
+            command: 'gmail-mcp',
+            args: [],
             env: {
               GMAIL_CREDENTIALS_PATH: '/home/node/.gmail-mcp/gcp-oauth.keys.json',
               GMAIL_TOKEN_PATH: '/home/node/.gmail-mcp/credentials.json',
@@ -465,8 +465,8 @@ async function runQuery(
         } : {}),
         ...(sdkEnv.ROAM_API_TOKEN ? {
           roam: {
-            command: 'npx',
-            args: ['-y', 'roam-research-mcp'],
+            command: 'roam-research-mcp',
+            args: [],
             env: {
               ROAM_API_TOKEN: sdkEnv.ROAM_API_TOKEN || '',
               ROAM_GRAPH_NAME: sdkEnv.ROAM_GRAPH_NAME || '',
@@ -475,8 +475,8 @@ async function runQuery(
         } : {}),
         ...(sdkEnv.TODOIST_API_TOKEN ? {
           todoist: {
-            command: 'npx',
-            args: ['-y', '@hoffination/mcp-todoist'],
+            command: 'mcp-todoist',
+            args: [],
             env: {
               TODOIST_API_TOKEN: sdkEnv.TODOIST_API_TOKEN || '',
             },
@@ -484,8 +484,8 @@ async function runQuery(
         } : {}),
         ...(fs.existsSync('/home/node/.gsheets-mcp/gcp-oauth.keys.json') ? {
           gsheets: {
-            command: 'npx',
-            args: ['-y', '@modelcontextprotocol/server-gdrive'],
+            command: 'mcp-server-gdrive',
+            args: [],
             env: {
               GDRIVE_CREDENTIALS_PATH: '/home/node/.gsheets-mcp/gcp-oauth.keys.json',
               GDRIVE_TOKEN_PATH: '/home/node/.gsheets-mcp/credentials.json',
@@ -494,8 +494,8 @@ async function runQuery(
         } : {}),
         ...(fs.existsSync('/home/node/.gcalendar-mcp/credentials.json') ? {
           calendar: {
-            command: 'npx',
-            args: ['-y', '@cocal/google-calendar-mcp'],
+            command: 'google-calendar-mcp',
+            args: [],
             env: {
               GOOGLE_OAUTH_CREDENTIALS: '/home/node/.gcalendar-mcp/gcp-oauth.keys.json',
               GOOGLE_CALENDAR_MCP_TOKEN_PATH: '/home/node/.gcalendar-mcp/credentials.json',

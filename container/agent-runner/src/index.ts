@@ -569,6 +569,12 @@ async function main(): Promise<void> {
     sdkEnv[key] = value;
   }
 
+  // Increase MCP connection timeout for slow VMs (e2-micro).
+  // Default is 30s which is too short when starting multiple MCP servers.
+  if (!sdkEnv.MCP_TIMEOUT) {
+    sdkEnv.MCP_TIMEOUT = '120000'; // 2 minutes
+  }
+
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
 

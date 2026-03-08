@@ -476,7 +476,7 @@ async function runQuery(
         ...(sdkEnv.TODOIST_API_TOKEN ? {
           todoist: {
             command: 'npx',
-            args: ['-y', '@abhiz123/todoist-mcp-server'],
+            args: ['-y', '@hoffination/mcp-todoist'],
             env: {
               TODOIST_API_TOKEN: sdkEnv.TODOIST_API_TOKEN || '',
             },
